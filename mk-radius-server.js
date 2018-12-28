@@ -1,41 +1,64 @@
-const radius = require('../lib/radius');
+const radius = require('./lib/radius');
 const dgram = require('dgram');
 
-const secret = 'radius_secret';
+const secret = process.env.RADIUS_SECRET;
 const server = dgram.createSocket('udp4');
+
+server.on('message', (msg, rinfo) => {
+  debug(msg, rinfo).then(() => {
+    console.log('exito');
+  }).catch((err) => {
+    console.log(err, 'errrrrrrrrrrrrrrrrrrrror');
+  });
+});
+
+const debug = async (msg, rinfo) => {
+  console.log('llego');
+  const packet = await readPacket(msg, secret);
+  const username = packet.attributes['User-Name'];
+  // console.log(packet, 'dsadsa');
+
+  if (packet.code === 'Access-Request') {
+    const auth = await checkAuth();
+    await sendAuth(auth, packet, rinfo);
+    console.log(`${packet.code} of user ${username}`);
+  }
+  if (packet.code === 'Accounting-Request') {
+    await sendAccountingResponde(packet, rinfo);
+    console.log(`${packet.code} Acct-Status-Type: ${packet.attributes['Acct-Status-Type']}user: ${username}`);
+  }
+};
+
+server.on('listening', () => {
+  const address = server.address();
+  console.log(`radius server listening ${address.address}:${address.port}`);
+});
+
+server.bind(1812);
 
 function readPacket(msg, secret) {
   return new Promise((resolve, reject) => {
-    try {
-      return resolve(radius.decode({
-        packet: msg,
-        secret,
-      }));
-    } catch (e) {
-      reject(`Failed to decode radius packet, silently dropping:${e}`);
-    }
+    const packet = radius.decode({
+      packet: msg,
+      secret,
+    });
+    return packet ? resolve(packet) : reject('auth error');
   });
 }
 
-function checkAuth(username, packet, rinfo) {
-  // if (db.includes(username)) {
-  if (true) {
-    sendAuth(true, username, packet, rinfo);
-  } else {
-    sendAuth(false, username, packet, rinfo);
-  }
+function checkAuth() {
+  return new Promise((resolve) => {
+    const bool = true; // do what ever you want to decide if that user should bypass hotspot's captive portal
+    return bool ? resolve(true) : resolve(false);
+  });
 }
 
-function sendAuth(auth, username, packet, rinfo) {
-  // console.log(buildResponse(auth, packet), 'responseeeeeeeeeeeeee');
-  const response = radius.encode_response(buildResponse(auth, packet));
-  // console.log(response.code);
-
-  // console.log(`Sending ${response.code} for user ${username}`);
-  server.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
-    if (err) {
-      console.log('Error sending response to ', rinfo);
-    }
+function sendAuth(auth, packet, rinfo) {
+  return new Promise((resolve, reject) => {
+    const response = radius.encode_response(buildResponse(auth, packet));
+    server.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
+      return err ? reject(`Error sending response to ${rinfo}`) : resolve();
+    });
   });
 }
 
@@ -51,15 +74,15 @@ function buildResponse(auth, packet) {
   };
 }
 
-function sendResponde(packet, rinfo) {
-  const response = radius.encode_response({
-    packet,
-    code: 'Accounting-Response',
-    secret
-  });
-  server.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
-    if (err) {
-      console.log('Error sending response to ', rinfo);
-    }
+function sendAccountingResponde(packet, rinfo) {
+  return new Promise((resolve, reject) => {
+    const response = radius.encode_response({
+      packet,
+      code: 'Accounting-Response',
+      secret,
+    });
+    server.send(response, 0, response.length, rinfo.port, rinfo.address, (err) => {
+      return err ? reject(`Error sending response to ${rinfo}`) : resolve();
+    });
   });
 }
