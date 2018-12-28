@@ -1,19 +1,18 @@
 const radius = require('./lib/radius');
 const dgram = require('dgram');
 
-const secret = process.env.RADIUS_SECRET;
+const secret = 'secret'
 const server = dgram.createSocket('udp4');
 
 server.on('message', (msg, rinfo) => {
   debug(msg, rinfo).then(() => {
-    console.log('exito');
+    // console.log('succes');
   }).catch((err) => {
-    console.log(err, 'errrrrrrrrrrrrrrrrrrrror');
+    console.log(err);
   });
 });
 
 const debug = async (msg, rinfo) => {
-  console.log('llego');
   const packet = await readPacket(msg, secret);
   const username = packet.attributes['User-Name'];
   // console.log(packet, 'dsadsa');
